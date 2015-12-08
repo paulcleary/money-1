@@ -18,5 +18,5 @@ package com.comcast.money.api
 
 class DefaultSpanHandler extends SpanHandler {
 
-  override def handle(spanData: SpanData): Unit = println(spanData.toString)
+  override def handle(span: Span): Unit = println(span.toString)
 }

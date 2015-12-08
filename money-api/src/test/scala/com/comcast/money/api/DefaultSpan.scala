@@ -16,84 +16,105 @@
 
 package com.comcast.money.api
 
-import java.lang
-import java.lang.{ Double, Long }
+import java.lang.Long
+import java.util
 
 import scala.collection._
 import scala.collection.JavaConversions._
+import scala.collection.immutable.HashMap
 
 // obviously not threadsafe and very mutable, basing this kinda on what I did for the java-only core
-class DefaultSpan(
-    val id: SpanId,
-    val spanName: String,
-    spanMonitor: SpanMonitor,
-    notes: mutable.Map[String, Note[_]] = new mutable.HashMap[String, Note[_]],
+case class DefaultSpan(
+    id: SpanId,
+    name: String,
+    handler: SpanHandler,
+    startTime: Long = null,
+    startInstant: Long = null,
+    endTime: Long = null,
+    endInstant: Long = null,
+    duration: Long = 0,
+    success: java.lang.Boolean = true,
+    recordedNotes: Map[String, Note[_]] = new HashMap[String, Note[_]](),
+    timers: Map[String, Long] = new HashMap[String, Long](),
     propagate: Boolean = false
 ) extends Span {
 
-  // TODO: yea, hacky, just prototyping though
-  private var stopTime: Long = _
-  private var stopInstant: Long = _
-  private var startedTime: Long = _
-  private var startInstant: Long = _
-  private var success: Boolean = true
+  private val HEADER_FORMAT: String = "Span: [ span-id=%s ][ trace-id=%s ][ parent-id=%s ][ span-name=%s ][ " +
+    "app-name=%s ][ start-time=%s ][ span-duration=%s ][ span-success=%s ]"
+  private val NOTE_FORMAT: String = "[ %s=%s ]"
+  private val NULL: String = "NULL"
 
-  override def startTime(): Long = startedTime
+  override def notes(): util.Map[String, Note[_]] = mapAsJavaMap(recordedNotes)
 
-  override def start(): Unit = {
-    startedTime = System.currentTimeMillis
-    startInstant = System.nanoTime
-
-    // Start watching me
-    spanMonitor.watch(this)
-
-    // Push me onto thread local
-    SpanLocal.push(this)
+  override def start(): Span = {
+    copy(
+      startTime = System.currentTimeMillis(),
+      startInstant = System.nanoTime()
+    )
   }
 
   override def childSpan(childName: String, propagate: Boolean): Span = {
     if (propagate)
       new DefaultSpan(
-        id.newChild(),
-        childName,
-        spanMonitor,
-        notes.filter(propagatedNotes),
-        propagate
-      )
+        id = id.newChild(),
+        name = childName,
+        handler = handler,
+        recordedNotes = recordedNotes.filter(propagatedNotes),
+        propagate = propagate
+      ).start()
     else
       new DefaultSpan(
-        id.newChild(),
-        childName,
-        spanMonitor
-      )
+        id = id.newChild(),
+        name = childName,
+        handler = handler
+      ).start()
   }
 
-  override def stop(): Unit = stop(true)
+  override def stop(): Span = stop(true)
 
-  override def stop(result: Boolean): Unit = {
-    stopTime = System.currentTimeMillis
-    stopInstant = System.nanoTime
-    success = result
-
-    // stop watching me
-    spanMonitor.unwatch(this)
-
-    // Remove this span from span local if it is the one in scope
-    // NOTE not sure if we are cleaning up thread local properly yet
-    SpanLocal.current.foreach {
-      current =>
-        if (current.id == this.id)
-          SpanLocal.pop()
-    }
+  override def stop(result: Boolean): Span = {
+    val stopped = copy(
+      endTime = System.currentTimeMillis(),
+      endInstant = System.nanoTime(),
+      duration = System.nanoTime() - startInstant,
+      success = result
+    )
+    handler.handle(stopped)
+    stopped
   }
 
-  override def startTimer(timerKey: String): Timer =
-    new Timer(timerKey, this, false)
+  override def startTimer(timerKey: String): Span =
+    copy(
+      timers = timers + (timerKey -> System.nanoTime())
+    )
 
-  override def data(): SpanData =
-    new SpanData(notes, startedTime, stopTime, success, id, spanName, stopInstant - startInstant)
+  override def stopTimer(timerKey: String): Span =
+    timers
+      .get(timerKey)
+      .map(started => Note.of(timerKey, System.nanoTime() - started))
+      .map(record)
+      .getOrElse(this)
 
-  override def record(note: Note[_]): Unit = notes += note.getName -> note
+  override def record(note: Note[_]): Span =
+    copy(
+      recordedNotes = recordedNotes + (note.name -> note)
+    )
+
+  override def toString(): String = {
+     val sb: StringBuilder = new StringBuilder
+     sb.append(
+       HEADER_FORMAT.format(
+         id.selfId, id.traceId, id.parentId, name, "app",
+         startTime, duration, success))
+     if (recordedNotes != null) {
+       for (note <- recordedNotes.values) {
+         sb.append(NOTE_FORMAT.format(note.name, valueOrNull(note.value)))
+       }
+     }
+     sb.toString
+   }
+
+  private def valueOrNull[T](value: T) = Option(value).getOrElse(NULL)
 
   private def propagatedNotes: ((String, Note[_])) => Boolean = tuple => tuple._2.isPropagated
 }

@@ -16,7 +16,7 @@
 
 package com.comcast.money.api
 
-class DefaultSpanFactory(spanHandler: SpanHandler, spanMonitor: SpanMonitor) extends SpanFactory {
+class DefaultSpanFactory(spanHandler: SpanHandler) extends SpanFactory {
 
   override def newSpan(spanName: String): Span = newSpan(spanName, false)
 
@@ -24,15 +24,16 @@ class DefaultSpanFactory(spanHandler: SpanHandler, spanMonitor: SpanMonitor) ext
   // working with ThreadLocal and a different implementation not working with ThreadLocal
   // As you can see, right now we don't have
   override def newSpan(spanName: String, propagate: Boolean): Span = {
-    val span = spanMonitor.inScope.map(_.childSpan(spanName, propagate)).getOrElse {
+    val span = SpanLocal.current.map(_.childSpan(spanName, propagate)).getOrElse {
       new DefaultSpan(
         new SpanId(),
         spanName,
-        spanMonitor,
+        spanHandler,
         propagate = propagate
       )
     }
-    span.start()
-    span
+    val started = span.start()
+    SpanLocal.push(started)
+    started
   }
 }

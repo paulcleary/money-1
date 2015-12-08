@@ -49,15 +49,15 @@ public class SpanId {
         this.selfId = selfId;
     }
 
-    public String getTraceId() {
+    public String traceId() {
         return traceId;
     }
 
-    public Long getParentId() {
+    public Long parentId() {
         return parentId;
     }
 
-    public Long getSelfId() {
+    public Long selfId() {
         return selfId;
     }
 
@@ -90,17 +90,17 @@ public class SpanId {
 
         SpanId spanId = (SpanId) o;
 
-        if (!getTraceId().equals(spanId.getTraceId())) return false;
-        if (!getParentId().equals(spanId.getParentId())) return false;
-        return getSelfId().equals(spanId.getSelfId());
+        if (!traceId().equals(spanId.traceId())) return false;
+        if (!parentId().equals(spanId.parentId())) return false;
+        return selfId().equals(spanId.selfId());
 
     }
 
     @Override
     public int hashCode() {
-        int result = getTraceId().hashCode();
-        result = 31 * result + getParentId().hashCode();
-        result = 31 * result + getSelfId().hashCode();
+        int result = traceId().hashCode();
+        result = 31 * result + parentId().hashCode();
+        result = 31 * result + selfId().hashCode();
         return result;
     }
 }

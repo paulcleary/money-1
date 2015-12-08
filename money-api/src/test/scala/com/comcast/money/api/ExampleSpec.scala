@@ -27,8 +27,7 @@ class ExampleSpec extends WordSpec with Matchers {
   "The prototype core" should {
     "work" in {
       val handler = new DefaultSpanHandler()
-      val monitor = new DefaultSpanMonitor(handler)
-      val tracer = new DefaultSpanFactory(handler, monitor)
+      val tracer = new DefaultSpanFactory(handler)
 
       val iWillTimeout = tracer.newSpan("timeMeOut")
 
@@ -36,13 +35,13 @@ class ExampleSpec extends WordSpec with Matchers {
         executors.submit(
           new Runnable {
             override def run(): Unit = {
-              val fooSpan = tracer.newSpan("foo")
-              fooSpan.record(Note.of("iam", "foo"))
+              var fooSpan = tracer.newSpan("foo")
+              fooSpan = fooSpan.record(Note.of("iam", "foo"))
 
               for (j <- 1 to 2) {
-                val barSpan = tracer.newSpan("bar")
+                var barSpan = fooSpan.childSpan("bar", false)
 
-                barSpan.record(Note.of("iam", "bar"))
+                barSpan = barSpan.record(Note.of("iam", "bar"))
                 barSpan.stop(true)
               }
 

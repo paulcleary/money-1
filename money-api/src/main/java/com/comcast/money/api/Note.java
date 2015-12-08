@@ -38,15 +38,15 @@ public class Note<T> {
         this.propagated = propagated;
     }
 
-    public String getName() {
+    public String name() {
         return name;
     }
 
-    public T getValue() {
+    public T value() {
         return value;
     }
 
-    public Long getTimestamp() {
+    public Long timestamp() {
         return timestamp;
     }
 
